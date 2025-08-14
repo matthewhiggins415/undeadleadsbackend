@@ -117,8 +117,6 @@ const uploadSheet = async (req, res) => {
   }
 };
 
-
-
 module.exports = {
   createSheetHandler,
   oauth2CallbackHandler,
