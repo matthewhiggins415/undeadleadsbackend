@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 
 const googleSheetsRoutes = require('./routes/googleSheetsRoutes');
 const googleScraperRoutes = require('./routes/googleScraperRoutes');
+const googleAuthRoutes = require('./routes/googleAuthRoutes');
 
 const app = express();
 const PORT = 5000;
@@ -28,6 +29,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Routes
+app.use('/', googleAuthRoutes);
 app.use('/api', googleSheetsRoutes);
 app.use('/api/google', googleScraperRoutes);
 

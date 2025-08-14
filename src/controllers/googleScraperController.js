@@ -1,6 +1,6 @@
 const { scrapeLeads } = require('../services/googleScraperService');
 const { createSheet } = require('../services/googleSheetsService');
-const { getOAuth2Client } = require('../config/googleAuth'); 
+const { getOAuth2Client } = require('../services/googleAuthService');
 
 const startScrape = async (req, res) => {
   // need to solve captcha automatically.. 
