@@ -20,10 +20,10 @@ const oauth2Callback = async (req, res) => {
   try {
     const code = req.query.code;
     await handleOAuth2Callback(code);
-    res.send('Google OAuth successful! Token saved.');
+    res.redirect('http://localhost:3000/home?auth=success');
   } catch (err) {
     console.error('Error handling OAuth2 callback:', err);
-    res.status(500).send('Failed to complete OAuth flow');
+    res.redirect('http://localhost:3000/home?auth=error');
   }
 };
 

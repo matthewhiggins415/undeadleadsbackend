@@ -29,7 +29,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Routes
-app.use('/', googleAuthRoutes);
+app.use('/api/google/', googleAuthRoutes);
 app.use('/api', googleSheetsRoutes);
 app.use('/api/google', googleScraperRoutes);
 
