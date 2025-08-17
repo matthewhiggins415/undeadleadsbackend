@@ -29,7 +29,10 @@ const createSheetHandler = async (req, res) => {
     });
   } catch (error) {
     console.error('[GoogleSheets] Error creating sheet:', error);
-    res.status(500).send('Error creating sheet');
+    res.status(401).json({
+      error: 'NOT_AUTHENTICATED',
+      message: 'Google authentication required. Please re-authenticate via /google/auth'
+    });
   }
 };
 
@@ -54,7 +57,10 @@ const uploadSheet = async (req, res) => {
     });
   } catch (error) {
     console.error('[GoogleSheets] Error uploading sheet:', error);
-    res.status(500).json({ error: 'Failed to fetch Google Sheet data' });
+    res.status(401).json({
+      error: 'NOT_AUTHENTICATED',
+      message: 'Google authentication required. Please re-authenticate via /google/auth'
+    });
   }
 };
 
