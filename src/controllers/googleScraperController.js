@@ -9,21 +9,17 @@ const startScrape = async (req, res) => {
 
     console.log("✅ Created sheet:", sheet.spreadsheetId);
 
-    // kick off scraper async (don’t block HTTP response)
-    scrapeLeads(req.body, sheet.spreadsheetId, oauth2Client)
-      .then(() => {
-        console.log("🎉 Scraping finished successfully");
-      })
-      .catch((err) => {
-        console.error("❌ Scraping failed inside controller:", err);
-      });
+    // await scraper before sending response
+    await scrapeLeads(req.body, sheet.spreadsheetId, oauth2Client);
 
-    // respond immediately with sheet info
+    console.log("🎉 Scraping finished successfully");
+
+    // respond once after scraping completes
     res.status(200).json({
       success: true,
-      message: 'Scraping started. Watch Socket.IO for captcha and progress events.',
+      message: 'Scraping complete!',
       spreadsheetId: sheet.spreadsheetId,
-      url: sheet.spreadsheetUrl
+      url: sheet.spreadsheetUrl,
     });
   } catch (err) {
     console.error('Error in scraping controller:', err);
