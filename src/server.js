@@ -1,45 +1,73 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const googleSheetsRoutes = require('./routes/googleSheetsRoutes');
 const googleScraperRoutes = require('./routes/googleScraperRoutes');
 const googleAuthRoutes = require('./routes/googleAuthRoutes');
+const { setSocketIO, continueScraping } = require('./services/googleScraperService');
 
 const app = express();
 const PORT = 5000;
 
-// Connect to db 
+// --- MongoDB connection (commented out for now) ---
 // const connectDB = async () => {
 //   try {
 //     const conn = await mongoose.connect(`${process.env.MONGO_URI}`);
-    
 //     console.log(`MongoDB Connected: ${conn.connection.host}`.cyan.underline);
 //   } catch(error) {
 //     console.error(`Error: ${error.message}`.red.underline.bold);
 //     process.exit(1);
 //   }
 // }
-  
 // connectDB();
 
-// Middleware
+// --- Middleware ---
 app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Routes
+// --- Routes ---
 app.use('/api/google/', googleAuthRoutes);
 app.use('/api', googleSheetsRoutes);
 app.use('/api/google', googleScraperRoutes);
 
-// Error handling middleware (optional but recommended)
+// --- Error handling middleware ---
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
 });
 
-// Start server
-app.listen(PORT, () => {
+// --- Create HTTP server & attach socket.io ---
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // your React frontend
+    methods: ["GET", "POST"],
+  },
+});
+
+// make io available to services
+setSocketIO(io);
+
+// handle socket connections
+io.on("connection", (socket) => {
+  console.log(`✅ Client connected: ${socket.id}`);
+
+  socket.on("captchaSolved", () => {
+    console.log("✅ Captcha solved, resuming scraper");
+    continueScraping();
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`❌ Client disconnected: ${socket.id}`);
+  });
+});
+
+// --- Start server ---
+server.listen(PORT, () => {
   console.log(`🚀 Server listening at http://localhost:${PORT}`);
 });

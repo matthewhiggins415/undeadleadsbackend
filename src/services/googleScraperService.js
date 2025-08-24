@@ -1,9 +1,6 @@
-// src/services/googleScraperService.js
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { google } = require('googleapis');
-const credentials = require('../../credentials.json');
-const readline = require('readline');
 require('dotenv').config({ quiet: true });
 const { OpenAI } = require('openai');
 
@@ -11,19 +8,24 @@ puppeteer.use(StealthPlugin());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const waitForUserInput = (prompt) => {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => rl.question(prompt, ans => {
-    rl.close();
-    resolve(ans);
-  }));
+let io; // socket.io instance
+let captchaResolve = null; // promise resolver for captcha
+
+// --- Socket.io injection from server.js ---
+function setSocketIO(newIO) {
+  io = newIO;
 }
 
+// --- Allow server.js to resume scraper when user solves captcha ---
+function continueScraping() {
+  if (captchaResolve) {
+    captchaResolve();
+    captchaResolve = null;
+  }
+}
+
+// --- Google Sheets append ---
 const appendToGoogleSheets = async (data, spreadsheetId, sheetName, oauth2Client) => {
-  // ** be aware. the sheetname is used wrong here
-  // sheetname is typically the bottom actual name of the sheet tab within the folder
-  // sheetname is actually be used as the name of the entire spreadsheet folder. 
-  
   const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
   const values = data.map(d => [
@@ -40,15 +42,16 @@ const appendToGoogleSheets = async (data, spreadsheetId, sheetName, oauth2Client
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `Sheet1!A:H`,
+    range: `Sheet1!A:H`, // ⚠️ TODO: replace with actual sheetName if needed
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values }
   });
 
   console.log(`✅ Appended ${data.length} rows to Google Sheets.`);
-}
+};
 
+// --- OpenAI parsing ---
 const getChatGPTData = async (snippetBatch) => {
   const systemPrompt = `Extract and return as JSON an array of people in the following format:
 
@@ -95,27 +98,26 @@ If unsure, return "NO_DOMAIN". Use all fields.`;
     console.error(`❌ Failed to parse OpenAI response:\n${err.message}`);
     return [];
   }
-}
+};
 
+// --- Scraper core ---
 const scrapeLeads = async (body, spreadsheetId, oauth2Client) => {
   console.log("req.body: ", body, "Spreadsheet ID:", spreadsheetId);
 
   const {
-    query,          // optional: full custom Google query
-    sheetName,      // name of target sheet tab
-    titleString,    // e.g. '("VP" OR "CTO" OR "Director")'
-    keywordString,  // e.g. '("streaming video" OR "OTT")'
-    locationString,  // e.g. '("US")'
-    numPages         // e.g. 5 
+    query,
+    sheetName,
+    titleString,
+    keywordString,
+    locationString,
+    numPages
   } = body;
 
-  // 1️⃣ Build the search query dynamically
+  // 1️⃣ Build the search query
   let SEARCH_QUERY;
   if (query && query.trim() !== "") {
-    // Use a full custom query if provided
     SEARCH_QUERY = query;
   } else {
-    // Fall back to building one from parts
     const safeTitle = titleString || '("VP" OR "CTO" OR "Director" OR "Head of" OR "Executive Producer")';
     const safeKeyword = keywordString || '("video streaming" OR "streaming video" OR "streaming platform" OR "FAST channel" OR "FAST channels" OR "OTT platform")';
     const safeLocation = locationString || '("US")';
@@ -137,7 +139,7 @@ const scrapeLeads = async (body, spreadsheetId, oauth2Client) => {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15'
   ];
 
-  // 2️⃣ Use this query in pagination
+  // 2️⃣ Paginate
   for (let pageNum = 0; pageNum < numPages; pageNum++) {
     const start = pageNum * 10;
     const encodedQuery = encodeURIComponent(SEARCH_QUERY);
@@ -149,17 +151,27 @@ const scrapeLeads = async (body, spreadsheetId, oauth2Client) => {
     console.log(`🔍 Google Page ${pageNum + 1}: ${searchUrl}`);
     await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // CAPTCHA check
+    // 3️⃣ CAPTCHA check
     const isCaptcha = await page.evaluate(() => {
       return !!document.querySelector('form#captcha-form') ||
         document.body.innerText.includes('unusual traffic');
     });
+
     if (isCaptcha) {
-      console.warn('⚠️ CAPTCHA detected! Please complete it manually.');
-      await waitForUserInput('Press Enter after CAPTCHA is solved...');
+      console.warn('⚠️ CAPTCHA detected! Waiting for user via socket...');
+
+      if (io) {
+        console.log(' io emitting captchaRequired');
+        io.emit("captchaRequired");
+      }
+
+      // wait until user clicks "Continue"
+      await new Promise((res) => {
+        captchaResolve = res;
+      });
     }
 
-    // Scrape snippets
+    // 4️⃣ Scrape snippets
     const snippets = await page.evaluate(() => {
       const clean = txt => txt?.replace(/\s+/g, ' ').trim();
       return Array.from(document.querySelectorAll('div.N54PNb')).map(block => {
@@ -173,7 +185,7 @@ const scrapeLeads = async (body, spreadsheetId, oauth2Client) => {
 
     console.log(`📄 Collected ${snippets.length} snippets`);
 
-    // Send to OpenAI in batches
+    // 5️⃣ Send to OpenAI in batches
     const batchSize = 10;
     for (let i = 0; i < snippets.length; i += batchSize) {
       const batch = snippets.slice(i, i + batchSize);
@@ -188,4 +200,9 @@ const scrapeLeads = async (body, spreadsheetId, oauth2Client) => {
   await browser.close();
 };
 
-module.exports = { scrapeLeads };
+// --- Exports ---
+module.exports = {
+  setSocketIO,
+  scrapeLeads,
+  continueScraping
+};

@@ -27,6 +27,7 @@
     "psl": "^1.15.0",
     "puppeteer": "^24.13.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socket.io": "^4.8.1"
   }
 }
