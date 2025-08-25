@@ -3,7 +3,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const http = require('http');
 const { Server } = require('socket.io');
-
+const storedSheetsRoutes = require('./routes/storedSheetsRoutes');
 const googleSheetsRoutes = require('./routes/googleSheetsRoutes');
 const googleScraperRoutes = require('./routes/googleScraperRoutes');
 const googleAuthRoutes = require('./routes/googleAuthRoutes');
@@ -11,18 +11,6 @@ const { setSocketIO, continueScraping } = require('./services/googleScraperServi
 
 const app = express();
 const PORT = 5000;
-
-// --- MongoDB connection (commented out for now) ---
-// const connectDB = async () => {
-//   try {
-//     const conn = await mongoose.connect(`${process.env.MONGO_URI}`);
-//     console.log(`MongoDB Connected: ${conn.connection.host}`.cyan.underline);
-//   } catch(error) {
-//     console.error(`Error: ${error.message}`.red.underline.bold);
-//     process.exit(1);
-//   }
-// }
-// connectDB();
 
 // --- Middleware ---
 app.use(cors({ origin: 'http://localhost:3000' }));
@@ -33,6 +21,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/api/google/', googleAuthRoutes);
 app.use('/api', googleSheetsRoutes);
 app.use('/api/google', googleScraperRoutes);
+app.use('/api/sheets', storedSheetsRoutes);
 
 // --- Error handling middleware ---
 app.use((err, req, res, next) => {

@@ -1,6 +1,7 @@
 const { scrapeLeads } = require('../services/googleScraperService');
 const { createSheet } = require('../services/googleSheetsService');
 const { getOAuth2Client } = require('../services/googleAuthService');
+const { addSheet } = require('../services/storedSheetsService');
 
 const startScrape = async (req, res) => {
   try {
@@ -13,6 +14,9 @@ const startScrape = async (req, res) => {
     await scrapeLeads(req.body, sheet.spreadsheetId, oauth2Client);
 
     console.log("🎉 Scraping finished successfully");
+
+    // add sheet to our json file for tracking. 
+    addSheet(sheet.spreadsheetId, sheet.spreadsheetUrl, req.body.sheetName);
 
     // respond once after scraping completes
     res.status(200).json({
