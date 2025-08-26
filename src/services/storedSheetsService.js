@@ -1,6 +1,7 @@
 // src/services/storedSheetsService.js
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
 
 const SHEETS_FILE = path.join(__dirname, '../../storedSheets.json');
 
@@ -17,6 +18,17 @@ const readSheets = () => {
   return JSON.parse(fs.readFileSync(SHEETS_FILE, 'utf-8'));
 }
 
+// Return sheet title using sheet ID 
+async function getSheetInfo(auth, spreadsheetId) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'properties.title',
+  });
+  
+  return response.data.properties.title; 
+}
+
 // Write sheets back
 const writeSheets = (sheets) => {
   fs.writeFileSync(SHEETS_FILE, JSON.stringify(sheets, null, 2));
@@ -29,7 +41,8 @@ const addSheet = (sheetId, sheetUrl, sheetName) => {
     id: sheetId, 
     url: sheetUrl, 
     name: sheetName, 
-    createdAt: new Date().toISOString() 
+    createdAt: new Date().toISOString(),
+    isMaster: false // default
   };
   sheets.push(newSheet);
   writeSheets(sheets);
@@ -40,6 +53,18 @@ const addSheet = (sheetId, sheetUrl, sheetName) => {
 const getSheet = (sheetId) => {
   const sheets = readSheets();
   return sheets.find((s) => s.id === sheetId) || null;
+}
+
+// See if there is a masterSheet
+const getMasterSheet = async () => {
+  try {
+    const data = await fs.readFile(storedSheetsPath, "utf-8");
+    const sheets = JSON.parse(data);
+    return sheets.find(s => s.isMaster) || null;
+  } catch (error) {
+    console.error("[StoredSheets] Error reading master sheet:", error);
+    return null;
+  }
 }
 
 // Read all
@@ -58,6 +83,22 @@ const updateSheet = (sheetId, newUrl) => {
   return sheets[index];
 }
 
+// Mark one sheet as the master
+const setMasterSheet = (sheetId) => {
+  const sheets = readSheets();
+  let found = false;
+  sheets.forEach((sheet) => {
+    if (sheet.id === sheetId) {
+      sheet.isMaster = true;
+      found = true;
+    } else {
+      sheet.isMaster = false;
+    }
+  });
+  writeSheets(sheets);
+  return found ? sheets.find((s) => s.id === sheetId) : null;
+}
+
 // Delete
 const deleteSheet = (sheetId) => {
   const sheets = readSheets();
@@ -70,7 +111,10 @@ const deleteSheet = (sheetId) => {
 module.exports = {
   addSheet,
   getSheet,
+  getSheetInfo,
   getAllSheets,
   updateSheet,
+  setMasterSheet,
+  getMasterSheet,
   deleteSheet,
 };
